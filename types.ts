@@ -28,13 +28,11 @@ export interface GraphNode extends d3.SimulationNodeDatum {
   fy?: number | null;
 }
 
-// Fix: Redefine GraphLink to allow `source` and `target` to be either string IDs or resolved GraphNode objects,
-// which is necessary before and after d3 simulation runs. This avoids a type conflict with the base d3.SimulationLinkDatum interface
-// and resolves downstream compilation errors.
-export interface GraphLink {
+// Fix: Correct GraphLink to extend the base d3.SimulationLinkDatum interface. This ensures type compatibility
+// with d3's force simulation and resolves ambiguous type errors during compilation, such as on Array.prototype.filter.
+export interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
-  index?: number;
 }
 
 export interface GraphData {
