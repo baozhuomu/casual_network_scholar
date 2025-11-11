@@ -30,7 +30,8 @@ export interface GraphNode extends d3.SimulationNodeDatum {
 
 // Fix: Correct GraphLink to extend the base d3.SimulationLinkDatum interface. This ensures type compatibility
 // with d3's force simulation and resolves ambiguous type errors during compilation, such as on Array.prototype.filter.
-export interface GraphLink extends d3.SimulationLinkDatum<GraphNode> {
+// By using Omit, we avoid overriding the base interface's properties with an incompatible type, which was causing the compiler error.
+export interface GraphLink extends Omit<d3.SimulationLinkDatum<GraphNode>, 'source' | 'target'> {
   source: string | GraphNode;
   target: string | GraphNode;
 }
