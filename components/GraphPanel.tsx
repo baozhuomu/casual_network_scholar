@@ -17,11 +17,10 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
   const [displayMode, setDisplayMode] = useState<DisplayMode>('all');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Fix: Correct the generic type for the d3 simulation. The second generic argument,
-  // the link datum type, was 'undefined' which violates the type constraints.
-  // It has been removed to allow TypeScript to use the default link datum type, resolving the error.
-  const simulationRef = useRef<d3.Simulation<GraphNode>>();
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown>>();
+  // Fix: Resolve TypeScript errors by providing the full generic type for d3.Simulation
+  // and initializing useRef with null. This makes the ref mutable and satisfies type constraints.
+  const simulationRef = useRef<d3.Simulation<GraphNode, undefined> | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   
   const filteredData = useMemo(() => {
     // Note: A previous comment indicated an error on these lines. The root cause was an incorrect
