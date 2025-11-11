@@ -1,0 +1,5 @@
+{
+  "name": "因果图谱学者",
+  "description": "一个AI驱动的平台，可自动从学术论文中提取因果关系，将其可视化为交互式网络，并生成新颖的研究主题建议。",
+  "requestFramePermissions": []
+}
