@@ -1,7 +1,7 @@
 {
-  "name": "causal-graph-scholar",
-  "version": "1.0.0",
+  "name": "因果图谱学者",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,8 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.16.0",
-    "pdfjs-dist": "^3.11.174",
+    "@google/genai": "^1.29.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "d3": "^7.9.0"

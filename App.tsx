@@ -5,7 +5,7 @@ import FileUploadPanel from './components/FileUploadPanel';
 import GraphPanel from './components/GraphPanel';
 import SuggestionsPanel from './components/SuggestionsPanel';
 import ClusterPanel from './components/ClusterPanel';
-import { extractAndSuggest } from './services/geminiService';
+import { extractCausalGraph, generateTopicSuggestions, detectDominantLanguage } from './services/geminiService';
 
 // Add mammoth and Tesseract to the window interface for TypeScript
 declare global {
@@ -31,7 +31,8 @@ export default function App() {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [topics, setTopics] = useState<TopicSuggestion[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -185,102 +186,4 @@ export default function App() {
   };
 
   const handleAnalysis = useCallback(async () => {
-    const validPapers = papers.filter(p => p.status === 'ready' && p.content && p.content.trim().length > 10);
-    if (validPapers.length === 0) {
-      setError("请上传并处理至少一篇有效的文献。");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setAppStep(AppStep.Extract);
-
-    try {
-      const paperContents = validPapers.map(p => p.content!);
-      const result = await extractAndSuggest(paperContents);
-      
-      setAppStep(AppStep.Visualize);
-      setGraphData(result.graphData);
-      setConcepts(result.concepts);
-      
-      setAppStep(AppStep.Generate);
-      setTopics(result.topics);
-      
-    } catch (e) {
-      console.error(e);
-      setError("分析文献失败。AI模型可能不可用或内容无效，请重试。");
-      setAppStep(AppStep.Upload);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [papers]);
-
-  const handleConceptsChange = (newConcepts: Concept[]) => {
-      setConcepts(newConcepts);
-
-      // Create a map for quick lookup of a variable's new concept group.
-      const variableToConceptMap = new Map<string, string>();
-      newConcepts.forEach(concept => {
-          concept.children.forEach(node => {
-              variableToConceptMap.set(node.id, concept.name);
-          });
-      });
-
-      // Update the 'group' property of each node in the graphData state.
-      // This ensures that node colors in the D3 graph update to reflect the new cluster.
-      setGraphData(prevData => ({
-          ...prevData,
-          nodes: prevData.nodes.map(node => ({
-              ...node,
-              group: variableToConceptMap.get(node.id) || node.group, // Fallback to old group if not found
-          })),
-      }));
-  };
-
-  const resetApp = () => {
-    setAppStep(AppStep.Upload);
-    setPapers([]);
-    setGraphData({ nodes: [], links: [] });
-    setConcepts([]);
-    setTopics([]);
-    setError(null);
-    setIsLoading(false);
-  }
-
-  return (
-    <div className="min-h-screen font-sans text-gray-800 bg-gray-50 dark:bg-gray-900 dark:text-gray-200 transition-colors duration-300">
-      <Header appStep={appStep} theme={theme} toggleTheme={toggleTheme} resetApp={resetApp} />
-      <main className="p-4 sm:p-6 lg:p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-100px)]">
-          
-          <div className={`transition-all duration-500 ${appStep === AppStep.Upload ? 'lg:col-span-12' : 'lg:col-span-2'}`}>
-            <FileUploadPanel 
-              papers={papers}
-              onFileChange={handleFileChange}
-              onRemovePaper={removePaper}
-              onAnalyze={handleAnalysis}
-              isLoading={isLoading}
-              error={error}
-              isCollapsed={appStep !== AppStep.Upload}
-            />
-          </div>
-
-          {appStep !== AppStep.Upload && (
-            <>
-              <div className="lg:col-span-3 h-full">
-                <ClusterPanel concepts={concepts} onConceptsChange={handleConceptsChange} />
-              </div>
-              <div className="lg:col-span-4 h-full">
-                <GraphPanel graphData={graphData} />
-              </div>
-              <div className="lg:col-span-3 h-full">
-                <SuggestionsPanel topics={topics} />
-              </div>
-            </>
-          )}
-
-        </div>
-      </main>
-    </div>
-  );
-}
+    const validPapers = papers

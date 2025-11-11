@@ -45,7 +45,7 @@ export interface GraphData {
 export interface TopicSuggestion {
   topic: string;
   hypothesis: string;
-  innovationScore: number;
+  innovation: string;
   feasibility: string;
 }
 

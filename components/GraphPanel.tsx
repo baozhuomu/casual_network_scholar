@@ -17,12 +17,15 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
   const [displayMode, setDisplayMode] = useState<DisplayMode>('all');
   const [searchTerm, setSearchTerm] = useState('');
   
-  const simulationRef = useRef<d3.Simulation<GraphNode, undefined>>();
+  // Fix: Correct the generic type for the d3 simulation. The second generic argument,
+  // the link datum type, was 'undefined' which violates the type constraints.
+  // It has been removed to allow TypeScript to use the default link datum type, resolving the error.
+  const simulationRef = useRef<d3.Simulation<GraphNode>>();
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown>>();
   
   const filteredData = useMemo(() => {
-    // Fix: These lines were causing "Expected 1 arguments, but got 0" due to an invalid type definition in `types.ts`.
-    // The error is resolved by correcting the `GraphLink` interface.
+    // Note: A previous comment indicated an error on these lines. The root cause was an incorrect
+    // type definition for the d3 simulation ref, which has been corrected above.
     if (displayMode === 'core') {
       const coreNodes = new Set(graphData.nodes.filter(n => n.isCore).map(n => n.id));
       const coreLinks = graphData.links.filter(l => {
