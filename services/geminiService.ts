@@ -1,10 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GraphData, TopicSuggestion, GraphNode, GraphLink, Concept } from '../types';
 
-// Fix: Initialize GoogleGenAI with the environment variable, not a hardcoded key.
-// The Vercel build process, via vite.config.ts, will replace process.env.API_KEY
-// with the actual key provided in the Vercel project settings.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+console.log("✅ Gemini key check:", process.env.VITE_GEMINI_API_KEY);
+// Fix: Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines.
+// const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const ai = new GoogleGenAI({ apiKey: 'AIzaSyAE9hVHkwz5rIPFVJvaZ0L0uSkn5bFgjfs' });
 
 export const detectDominantLanguage = (texts: string[]): 'en' | 'zh' => {
   let enChars = 0;
@@ -82,11 +82,7 @@ Provide the output in a single, valid JSON object with NO other text or markdown
 }
 
 Here are the academic texts:
-${papers.map((p, i) => `
-Text ${i + 1}:
-"""
-${p}
-"""`).join('\n')}
+${papers.map((p, i) => `\nText ${i + 1}:\n"""\n${p}\n"""`).join('\n')}
 `;
   
   const extractionResult = await ai.models.generateContent({
