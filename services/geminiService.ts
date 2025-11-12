@@ -2,7 +2,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { GraphData, TopicSuggestion, GraphNode, GraphLink, Concept } from '../types';
 
 // Fix: Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const ai = new GoogleGenAI({ apiKey: 'AIzaSyAE9hVHkwz5rIPFVJvaZ0L0uSkn5bFgjfs' });
 
 export const detectDominantLanguage = (texts: string[]): 'en' | 'zh' => {
   let enChars = 0;
