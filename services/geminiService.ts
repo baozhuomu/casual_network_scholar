@@ -1,8 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { GraphData, TopicSuggestion, GraphNode, GraphLink, Concept } from '../types';
 
-// ✅ 修正：确保环境变量与 Netlify 的设置一致
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// 改：通过 Netlify Function 转发请求，而不是直接调用 Gemini API
+const GEMINI_PROXY_URL = '/.netlify/functions/gemini-proxy';
 
 export const detectDominantLanguage = (texts: string[]): 'en' | 'zh' => {
   let enChars = 0;
@@ -17,9 +16,7 @@ export const detectDominantLanguage = (texts: string[]): 'en' | 'zh' => {
     zhChars += (text.match(zhRegex) || []).length;
   }
   
-  // If there's barely any text, default to English to avoid issues.
   if (enChars + zhChars < 100) return 'en';
-
   return zhChars > enChars ? 'zh' : 'en';
 };
 
@@ -28,7 +25,6 @@ function parseJsonResponse(rawText: string): any {
         return JSON.parse(rawText);
     } catch (e) {
          console.error("Failed to parse API response as JSON", e);
-         // Attempt to clean the string if it's wrapped in markdown
          const jsonRegex = /```json\s*([\s\S]*?)\s*```/;
          const match = rawText.match(jsonRegex);
          if (match && match[1]) {
@@ -42,6 +38,9 @@ function parseJsonResponse(rawText: string): any {
     }
 }
 
+// ------------------------
+// 📘 提取因果图函数
+// ------------------------
 export async function extractCausalGraph(papers: string[]): Promise<{ graphData: GraphData; concepts: Concept[] }> {
   const dominantLanguage = detectDominantLanguage(papers);
   const outputLanguageInstruction = dominantLanguage === 'en'
@@ -86,17 +85,17 @@ Text ${i + 1}:
 ${p}
 """`).join('\n')}
 `;
-  
-  // ✅ 修正模型路径，使用 v1 版本与 models/ 前缀
-  const extractionResult = await ai.models.generateContent({
-      model: 'models/gemini-1.5-flash',
-      contents: extractionPrompt,
-      config: {
-        responseMimeType: "application/json",
-      },
+
+  // ✅ 改：调用 Netlify 的 serverless proxy，而不是直接访问 Google
+  const response = await fetch(GEMINI_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: extractionPrompt }),
   });
 
-  const extractionResponse = parseJsonResponse(extractionResult.text);
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const extractionResponse = parseJsonResponse(text);
 
   const { nodes: responseNodes, links: responseLinks, concepts: responseConcepts } = extractionResponse;
 
@@ -135,6 +134,9 @@ ${p}
   return { graphData, concepts };
 }
 
+// ------------------------
+// 📘 生成主题建议函数
+// ------------------------
 export async function generateTopicSuggestions(graphData: GraphData, concepts: Concept[], language: 'en' | 'zh'): Promise<TopicSuggestion[]> {
     const outputLanguageInstruction = language === 'en'
     ? "The output, including all topics, hypotheses, and rationales, MUST be in English."
@@ -148,8 +150,8 @@ Based on the provided graph, generate 5 to 10 innovative and feasible research t
 For each topic, you MUST provide:
 1.  **topic**: A concise and compelling title for the research question.
 2.  **hypothesis**: A clear, testable hypothesis derived from the topic.
-3.  **innovation**: A justification for why this topic is innovative. This should feel like you've cross-referenced it against academic databases (like CrossRef, Semantic Scholar, CNKI) and found it to be a novel angle. For example, explain that a particular link is under-researched, or that combining two concepts is a new approach.
-4.  **feasibility**: A statement on how this research could be conducted. It should be empirically testable, either through direct observation/experimentation or by synthesizing existing research.
+3.  **innovation**: A justification for why this topic is innovative.
+4.  **feasibility**: A statement on how this research could be conducted.
 
 ${outputLanguageInstruction}
 
@@ -157,27 +159,18 @@ Here is the existing knowledge graph:
 Nodes: ${JSON.stringify(graphData.nodes.map(n => n.id))}
 Causal Relations (links): ${JSON.stringify(graphData.links.map(l => ({source: (l.source as GraphNode).id, target: (l.target as GraphNode).id})))}
 Concept Clusters: ${JSON.stringify(concepts.map(c => ({name: c.name, variables: c.children.map(n => n.id)})))}
-
-Provide the output as a single, valid JSON array of objects. Do not include any explanations, markdown formatting, or text outside of the JSON array.
-The JSON structure for each object must be:
-{
-  "topic": "The unexplored causal link between [Variable A] and [Variable C]",
-  "hypothesis": "[Variable A] is hypothesized to have a significant negative impact on [Variable C], a relationship not directly addressed in the source literature.",
-  "innovation": "While the source texts link A to B and B to C, the direct A -> C relationship is a theoretical gap. A preliminary search suggests this direct pathway is under-investigated.",
-  "feasibility": "This hypothesis can be tested using a longitudinal study tracking metrics for Variable A and Variable C over time in a relevant population."
-}
 `;
 
-    // ✅ 修正模型路径，保持一致
-    const suggestionResult = await ai.models.generateContent({
-      model: 'models/gemini-1.5-flash',
-      contents: suggestionPrompt,
-      config: {
-        responseMimeType: "application/json",
-      }
+    // ✅ 同样通过 Netlify function 调用
+    const response = await fetch(GEMINI_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: suggestionPrompt }),
     });
 
-    const topics: TopicSuggestion[] = parseJsonResponse(suggestionResult.text);
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const topics: TopicSuggestion[] = parseJsonResponse(text);
 
     if (!topics || !Array.isArray(topics) || topics.length === 0) {
       throw new Error("Failed to generate valid topic suggestions.");
