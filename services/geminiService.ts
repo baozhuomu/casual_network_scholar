@@ -1,9 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GraphData, TopicSuggestion, GraphNode, GraphLink, Concept } from '../types';
 
-// Fix: Initialize GoogleGenAI with the environment variable, not a hardcoded key.
-// The Vercel build process, via vite.config.ts, will replace process.env.API_KEY
-// with the actual key provided in the Vercel project settings.
+// ✅ 修正：确保环境变量与 Netlify 的设置一致
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
 export const detectDominantLanguage = (texts: string[]): 'en' | 'zh' => {
@@ -89,13 +87,15 @@ ${p}
 """`).join('\n')}
 `;
   
+  // ✅ 修正模型路径，使用 v1 版本与 models/ 前缀
   const extractionResult = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'models/gemini-1.5-flash',
       contents: extractionPrompt,
       config: {
         responseMimeType: "application/json",
       },
   });
+
   const extractionResponse = parseJsonResponse(extractionResult.text);
 
   const { nodes: responseNodes, links: responseLinks, concepts: responseConcepts } = extractionResponse;
@@ -168,13 +168,15 @@ The JSON structure for each object must be:
 }
 `;
 
+    // ✅ 修正模型路径，保持一致
     const suggestionResult = await ai.models.generateContent({
-      model: 'gemini-1.5-flash', // Using a more powerful model for creative suggestions
+      model: 'models/gemini-1.5-flash',
       contents: suggestionPrompt,
       config: {
         responseMimeType: "application/json",
       }
     });
+
     const topics: TopicSuggestion[] = parseJsonResponse(suggestionResult.text);
 
     if (!topics || !Array.isArray(topics) || topics.length === 0) {
