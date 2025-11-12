@@ -211,9 +211,19 @@ export default function App() {
       const newTopics = await generateTopicSuggestions(extractedGraph, extractedConcepts, dominantLanguage);
       setTopics(newTopics);
       
-    } catch (e) {
-      console.error(e);
-      setError("分析文献失败。AI模型可能不可用或内容无效，请重试。");
+    } catch (e: any) {
+      console.error("--- 分析失败 ---");
+      console.error("在 handleAnalysis 函数中捕获到未处理的错误:");
+      console.error("错误对象 (Error Object):", e);
+
+      let userFriendlyError = "分析文献失败。AI模型可能不可用或内容无效。请检查控制台以获取详细技术信息，然后重试。";
+      if (e instanceof Error) {
+          userFriendlyError = `分析失败: ${e.message}. 请检查控制台日志。`;
+      } else if (e && typeof e === 'object' && 'message' in e) {
+          userFriendlyError = `分析失败: ${String(e.message)}. 请检查控制台日志。`;
+      }
+
+      setError(userFriendlyError);
       setAppStep(AppStep.Upload);
     } finally {
       setIsAnalyzing(false);
@@ -234,9 +244,18 @@ export default function App() {
 
         const newTopics = await generateTopicSuggestions(graphData, concepts, dominantLanguage);
         setTopics(newTopics);
-    } catch(e) {
-        console.error(e);
-        setError("生成新主题失败，请重试。");
+    } catch(e: any) {
+        console.error("--- 主题生成失败 ---");
+        console.error("在 handleGenerateNewTopics 函数中捕获到未处理的错误:");
+        console.error("错误对象 (Error Object):", e);
+        
+        let userFriendlyError = "生成新主题失败。请检查控制台以获取详细技术信息，然后重试。";
+        if (e instanceof Error) {
+            userFriendlyError = `生成新主题失败: ${e.message}. 请检查控制台日志。`;
+        } else if (e && typeof e === 'object' && 'message' in e) {
+            userFriendlyError = `生成新主题失败: ${String(e.message)}. 请检查控制台日志。`;
+        }
+        setError(userFriendlyError);
     } finally {
         setIsGeneratingSuggestions(false);
     }
@@ -260,7 +279,7 @@ export default function App() {
           ...prevData,
           nodes: prevData.nodes.map(node => ({
               ...node,
-              group: variableToConceptMap.get(node.id) || node.group, // Fallback to old group if not found
+              group: variableToConceptMap.get(node.id) || "未分组", // Fallback to "ungrouped"
           })),
       }));
   };
