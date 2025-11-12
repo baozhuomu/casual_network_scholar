@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { GraphData, GraphNode, GraphLink } from '../types';
 import { SearchIcon } from './icons/SearchIcon';
+import { CenterIcon } from './icons/CenterIcon';
 
 interface GraphPanelProps {
   graphData: GraphData;
@@ -17,14 +18,10 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
   const [displayMode, setDisplayMode] = useState<DisplayMode>('all');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Fix: Resolve TypeScript errors by providing the full generic type for d3.Simulation
-  // and initializing useRef with null. This makes the ref mutable and satisfies type constraints.
   const simulationRef = useRef<d3.Simulation<GraphNode, undefined> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   
   const filteredData = useMemo(() => {
-    // Note: A previous comment indicated an error on these lines. The root cause was an incorrect
-    // type definition for the d3 simulation ref, which has been corrected above.
     if (displayMode === 'core') {
       const coreNodes = new Set(graphData.nodes.filter(n => n.isCore).map(n => n.id));
       const coreLinks = graphData.links.filter(l => {
@@ -38,12 +35,13 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
   }, [graphData, displayMode]);
 
   useEffect(() => {
-    if (!svgRef.current || !containerRef.current || !filteredData.nodes.length) {
+    const currentContainer = containerRef.current;
+    if (!svgRef.current || !currentContainer || !filteredData.nodes.length) {
         if (svgRef.current) d3.select(svgRef.current).selectAll("*").remove();
         return;
     };
 
-    const { width, height } = containerRef.current.getBoundingClientRect();
+    const { width, height } = currentContainer.getBoundingClientRect();
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
@@ -55,8 +53,6 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
     const nodes: GraphNode[] = filteredData.nodes.map(d => ({...d}));
 
     const simulation = d3.forceSimulation(nodes)
-      // Fix: Cast links to `any` because d3's typescript definitions are too strict and don't
-      // properly handle source/target being string IDs before the simulation runs.
       .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(120))
       .force("charge", d3.forceManyBody().strength(-400))
       .force("center", d3.forceCenter(width / 2, height / 2))
@@ -129,13 +125,35 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
       label.attr("x", d => d.x!).attr("y", d => d.y!);
     });
     
-    const zoomHandler = d3.zoom<SVGSVGElement, unknown>().on('zoom', (event) => {
-        g.attr('transform', event.transform);
-    });
+    const zoomHandler = d3.zoom<SVGSVGElement, unknown>()
+        .extent([[0, 0], [width, height]])
+        .scaleExtent([0.2, 5])
+        .on('zoom', (event) => {
+            g.attr('transform', event.transform);
+        });
     
     svg.call(zoomHandler);
     zoomRef.current = zoomHandler;
     svg.on('click', () => setSelectedNode(null));
+
+    const resizeObserver = new ResizeObserver(entries => {
+        const entry = entries[0];
+        const { width: newWidth, height: newHeight } = entry.contentRect;
+        
+        if (simulationRef.current) {
+            simulationRef.current.force("center", d3.forceCenter(newWidth / 2, newHeight / 2));
+            simulationRef.current.alpha(0.3).restart();
+        }
+        if (zoomRef.current) {
+            zoomRef.current.extent([[0, 0], [newWidth, newHeight]]);
+        }
+    });
+
+    resizeObserver.observe(currentContainer);
+
+    return () => {
+        resizeObserver.disconnect();
+    };
 
   }, [filteredData]);
   
@@ -143,8 +161,6 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
     if (!svgRef.current) return;
     const g = d3.select(svgRef.current).select('g');
     const nodes = g.selectAll<SVGCircleElement, GraphNode>('.nodes circle');
-    // Fix: Provide explicit generic types for the d3 selection. This correctly types the bound data `d`
-    // in subsequent operations and resolves errors where properties were accessed on an `unknown` type.
     const links = g.selectAll<SVGLineElement, GraphLink>('.links line');
     const labels = g.selectAll<SVGTextElement, GraphNode>('.labels text');
 
@@ -174,15 +190,22 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
   
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchTerm) return;
+    if (!searchTerm || !containerRef.current) return;
     const node = filteredData.nodes.find(n => n.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
     if (node && svgRef.current && zoomRef.current) {
-        const { width, height } = containerRef.current!.getBoundingClientRect();
+        const { width, height } = containerRef.current.getBoundingClientRect();
         const svg = d3.select(svgRef.current);
         const transform = d3.zoomIdentity.translate(width / 2, height / 2).scale(1.5).translate(-(node.x || 0), -(node.y || 0));
         svg.transition().duration(750).call(zoomRef.current.transform, transform);
         setSelectedNode(node);
+    }
+  };
+
+  const handleRecenter = () => {
+    if (svgRef.current && zoomRef.current) {
+        const svg = d3.select(svgRef.current);
+        svg.transition().duration(750).call(zoomRef.current.transform, d3.zoomIdentity);
     }
   };
 
@@ -229,6 +252,9 @@ const GraphPanel: React.FC<GraphPanelProps> = ({ graphData }) => {
                 <button onClick={() => setDisplayMode('all')} className={`px-2 py-0.5 text-xs rounded ${displayMode === 'all' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>全量变量</button>
                 <button onClick={() => setDisplayMode('core')} className={`px-2 py-0.5 text-xs rounded ${displayMode === 'core' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}>核心变量</button>
             </div>
+             <button onClick={handleRecenter} className="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" title="居中视图">
+                <CenterIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            </button>
         </div>
       </div>
       <div ref={containerRef} className="w-full h-full flex-grow relative overflow-hidden">

@@ -186,38 +186,35 @@ export default function App() {
   };
 
   const handleAnalysis = useCallback(async () => {
-    const validPapers = papers.filter(p => p.status === 'ready' && p.content);
+    const validPapers = papers.filter(p => p.status === 'ready' && p.content && p.content.trim().length > 10);
     if (validPapers.length === 0) {
-      setError("没有准备好可供分析的文献。");
+      setError("请上传并处理至少一篇有效的文献。");
       return;
     }
 
     setIsAnalyzing(true);
     setError(null);
-    setGraphData({ nodes: [], links: [] });
-    setTopics([]);
-    setConcepts([]);
     setAppStep(AppStep.Extract);
 
     try {
-      const contents = validPapers.map(p => p.content!);
-      const { graphData: newGraphData, concepts: newConcepts } = await extractCausalGraph(contents);
+      const paperContents = validPapers.map(p => p.content!);
+      const { graphData: extractedGraph, concepts: extractedConcepts } = await extractCausalGraph(paperContents);
       
-      setGraphData(newGraphData);
-      setConcepts(newConcepts);
       setAppStep(AppStep.Visualize);
-
-      // After visualizing the graph, automatically generate the first set of topics
-      setIsGeneratingSuggestions(true);
+      setGraphData(extractedGraph);
+      setConcepts(extractedConcepts);
+      
       setAppStep(AppStep.Generate);
-      const dominantLanguage = detectDominantLanguage(contents);
-      const newTopics = await generateTopicSuggestions(newGraphData, newConcepts, dominantLanguage);
+      setIsGeneratingSuggestions(true);
+      
+      const dominantLanguage = detectDominantLanguage(paperContents);
+      const newTopics = await generateTopicSuggestions(extractedGraph, extractedConcepts, dominantLanguage);
       setTopics(newTopics);
-
-    } catch (e: any) {
-      console.error("Analysis failed:", e);
-      setError(e.message || "分析文献时发生未知错误。");
-      setAppStep(AppStep.Upload); // Revert to upload step on failure
+      
+    } catch (e) {
+      console.error(e);
+      setError("分析文献失败。AI模型可能不可用或内容无效，请重试。");
+      setAppStep(AppStep.Upload);
     } finally {
       setIsAnalyzing(false);
       setIsGeneratingSuggestions(false);
@@ -225,24 +222,48 @@ export default function App() {
   }, [papers]);
   
   const handleGenerateNewTopics = useCallback(async () => {
-    if (!graphData.nodes.length) {
-      setError("无法生成建议，因为没有可用的因果图谱。");
-      return;
-    }
+    if (!graphData.nodes.length) return;
+
     setIsGeneratingSuggestions(true);
     setError(null);
+
     try {
-      const contents = papers.filter(p => p.status === 'ready' && p.content).map(p => p.content!);
-      const dominantLanguage = detectDominantLanguage(contents);
-      const newTopics = await generateTopicSuggestions(graphData, concepts, dominantLanguage);
-      setTopics(newTopics);
-    } catch (e: any)      {
-      console.error("Failed to generate new topics:", e);
-      setError(e.message || "生成新主题时发生错误。");
+        const validPapers = papers.filter(p => p.status === 'ready' && p.content);
+        const paperContents = validPapers.map(p => p.content!);
+        const dominantLanguage = detectDominantLanguage(paperContents);
+
+        const newTopics = await generateTopicSuggestions(graphData, concepts, dominantLanguage);
+        setTopics(newTopics);
+    } catch(e) {
+        console.error(e);
+        setError("生成新主题失败，请重试。");
     } finally {
-      setIsGeneratingSuggestions(false);
+        setIsGeneratingSuggestions(false);
     }
   }, [graphData, concepts, papers]);
+
+
+  const handleConceptsChange = (newConcepts: Concept[]) => {
+      setConcepts(newConcepts);
+
+      // Create a map for quick lookup of a variable's new concept group.
+      const variableToConceptMap = new Map<string, string>();
+      newConcepts.forEach(concept => {
+          concept.children.forEach(node => {
+              variableToConceptMap.set(node.id, concept.name);
+          });
+      });
+
+      // Update the 'group' property of each node in the graphData state.
+      // This ensures that node colors in the D3 graph update to reflect the new cluster.
+      setGraphData(prevData => ({
+          ...prevData,
+          nodes: prevData.nodes.map(node => ({
+              ...node,
+              group: variableToConceptMap.get(node.id) || node.group, // Fallback to old group if not found
+          })),
+      }));
+  };
 
   const resetApp = () => {
     setAppStep(AppStep.Upload);
@@ -250,57 +271,48 @@ export default function App() {
     setGraphData({ nodes: [], links: [] });
     setConcepts([]);
     setTopics([]);
+    setError(null);
     setIsAnalyzing(false);
     setIsGeneratingSuggestions(false);
-    setError(null);
-  };
+  }
 
   return (
-    <div className={`min-h-screen font-sans text-gray-900 dark:text-gray-100 ${theme}`}>
+    <div className="min-h-screen font-sans text-gray-800 bg-gray-50 dark:bg-gray-900 dark:text-gray-200 transition-colors duration-300">
       <Header appStep={appStep} theme={theme} toggleTheme={toggleTheme} resetApp={resetApp} />
-      <main className="p-4 sm:p-6 lg:p-8 max-w-screen-2xl mx-auto">
-        {appStep === AppStep.Upload || appStep === AppStep.Extract ? (
-          <div className="max-w-2xl mx-auto">
-            <FileUploadPanel
+      <main className="p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-100px)]">
+          
+          <div className={`transition-all duration-500 ${appStep === AppStep.Upload ? 'lg:col-span-12' : 'lg:col-span-2'}`}>
+            <FileUploadPanel 
               papers={papers}
               onFileChange={handleFileChange}
               onRemovePaper={removePaper}
               onAnalyze={handleAnalysis}
               isLoading={isAnalyzing}
               error={error}
-              isCollapsed={false}
+              isCollapsed={appStep !== AppStep.Upload}
             />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-120px)]">
-            <div className="lg:col-span-3 h-full">
-                <FileUploadPanel
-                    papers={papers}
-                    onFileChange={handleFileChange}
-                    onRemovePaper={removePaper}
-                    onAnalyze={handleAnalysis}
-                    isLoading={isAnalyzing}
-                    error={error}
-                    isCollapsed={true}
+
+          {appStep !== AppStep.Upload && (
+            <>
+              <div className="lg:col-span-3 h-full">
+                <ClusterPanel concepts={concepts} onConceptsChange={handleConceptsChange} />
+              </div>
+              <div className="lg:col-span-4 h-full">
+                <GraphPanel graphData={graphData} />
+              </div>
+              <div className="lg:col-span-3 h-full">
+                <SuggestionsPanel 
+                  topics={topics}
+                  onRefresh={handleGenerateNewTopics}
+                  isRefreshing={isGeneratingSuggestions}
                 />
-            </div>
-            <div className="lg:col-span-6 h-full">
-              <GraphPanel graphData={graphData} />
-            </div>
-            <div className="lg:col-span-3 h-full flex flex-col gap-6">
-              <div className="flex-1 min-h-0">
-                  <ClusterPanel concepts={concepts} onConceptsChange={setConcepts} />
               </div>
-              <div className="flex-1 min-h-0">
-                  <SuggestionsPanel 
-                    topics={topics} 
-                    onRefresh={handleGenerateNewTopics}
-                    isRefreshing={isGeneratingSuggestions}
-                  />
-              </div>
-            </div>
-          </div>
-        )}
+            </>
+          )}
+
+        </div>
       </main>
     </div>
   );
